@@ -1,0 +1,59 @@
+name: Test versions
+
+# Build and smoke-test several upstream versions without releasing anything.
+# Runs on PRs that touch the build itself, and on demand (e.g. before
+# backfilling releases of older versions).
+on:
+  pull_request:
+    paths:
+      - scripts/**
+      - test/**
+      - .github/workflows/build.yml
+      - .github/workflows/test-versions.yml
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: Space-separated versions to test. Leave empty for the default list.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Every upstream release that has a CMake build for the compiler.
+  DEFAULT_VERSIONS: >-
+    0.9.2 0.9.3 0.9.3.1
+    0.10.0 0.11.0 0.12.0 0.13.0
+    0.14.0 0.14.1 0.14.2
+    0.15.0 0.16.0 0.17.0 0.18.0 0.18.1
+    0.19.0 0.20.0 0.21.0 0.22.0 0.23.0 0.24.0 0.25.0
+
+jobs:
+  versions:
+    runs-on: ubuntu-24.04
+    outputs:
+      json: ${{ steps.list.outputs.json }}
+    steps:
+      - id: list
+        env:
+          INPUT_VERSIONS: ${{ inputs.versions }}
+        run: |
+          versions=${INPUT_VERSIONS:-$DEFAULT_VERSIONS}
+          json=$(tr -s '[:space:]' '\n' <<<"$versions" | jq -R . | jq -cs 'map(select(length > 0))')
+          echo "$json"
+          echo "json=$json" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: versions
+    strategy:
+      fail-fast: false
+      matrix:
+        version: ${{ fromJSON(needs.versions.outputs.json) }}
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ matrix.version }}

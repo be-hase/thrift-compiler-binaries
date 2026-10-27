@@ -1,0 +1,111 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+    branches: [main]
+    paths: [THRIFT_VERSION]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Upstream Thrift version to build (e.g. 0.25.0)
+        required: true
+      revision:
+        description: Rebuild number for an already released version (e.g. 1 -> v0.25.0-1). Leave empty for the first build.
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      release: ${{ steps.resolve.outputs.release }}
+      latest: ${{ steps.resolve.outputs.latest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: resolve
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
+          INPUT_REVISION: ${{ inputs.revision }}
+          GH_TOKEN: ${{ github.token }}
+        run: scripts/resolve-release.sh
+
+  build:
+    needs: prepare
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.prepare.outputs.version }}
+
+  release:
+    needs: [prepare, build]
+    if: needs.prepare.outputs.release == 'true'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    env:
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      LATEST: ${{ needs.prepare.outputs.latest }}
+      SOURCE_SHA256: ${{ needs.build.outputs.source-sha256 }}
+      SOURCE_SIGNER: ${{ needs.build.outputs.source-signer }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: dist-${{ needs.prepare.outputs.version }}-*
+          path: dist
+          merge-multiple: true
+      - name: Generate SHA256SUMS
+        working-directory: dist
+        run: |
+          sha256sum -- * > SHA256SUMS
+          cat SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Write release notes
+        run: |
+          {
+            echo "Unofficial build of the Thrift compiler $VERSION. **Not affiliated with or endorsed by the Apache Software Foundation.**"
+            echo
+            echo "Built from the upstream source release, verified against the upstream KEYS before building:"
+            echo
+            echo "- Source: \`thrift-$VERSION.tar.gz\`"
+            echo "- SHA-256: \`$SOURCE_SHA256\`"
+            echo "- Signed by: \`$SOURCE_SIGNER\`"
+            echo
+            echo "| Asset | Platform |"
+            echo "| --- | --- |"
+            echo "| \`thrift-$VERSION-linux-x86_64.tar.gz\` | Linux x86_64 (static) |"
+            echo "| \`thrift-$VERSION-linux-aarch64.tar.gz\` | Linux aarch64 (static) |"
+            echo "| \`thrift-$VERSION-macos-universal.tar.gz\` | macOS 11+ (arm64 + x86_64) |"
+            if [ -f "dist/thrift-$VERSION-windows-x86.exe" ]; then
+              echo "| \`thrift-$VERSION-windows-x86.exe\` | Windows, upstream's official exe mirrored as-is (\`.asc\` is upstream's signature) |"
+            fi
+            echo
+            echo "See the [README](https://github.com/$GITHUB_REPOSITORY#verifying-downloads) for how to verify downloads."
+          } > notes.md
+      - name: Create release
+        run: |
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "thrift ${TAG#v}" \
+            --notes-file notes.md \
+            --latest="$LATEST"
