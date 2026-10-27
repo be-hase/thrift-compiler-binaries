@@ -14,6 +14,12 @@ on:
 permissions:
   contents: read
 
+# An explicit "bash" adds -o pipefail; the implicit default is only "bash -e",
+# so a failing command piped into tee would not fail the step.
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true

@@ -21,8 +21,16 @@ on:
 permissions:
   contents: read
 
+# An explicit "bash" adds -o pipefail; the implicit default is only "bash -e",
+# so a failing command piped into tee would not fail the step.
+defaults:
+  run:
+    shell: bash
+
+# GitHub keeps only the newest pending run of a group, so pushes to main get a
+# group per commit: a queued version bump must never be dropped.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.ref }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && inputs.version || github.event_name == 'push' && github.sha || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
