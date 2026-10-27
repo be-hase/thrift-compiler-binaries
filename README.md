@@ -18,7 +18,7 @@ The Thrift project publishes a source tarball and a Windows `.exe`, but no prebu
 | `thrift-<version>-linux-aarch_64.tar.gz` | Linux aarch64 | Fully static (musl), runs on any distribution |
 | `thrift-<version>-osx-aarch_64.tar.gz` | macOS 11+ arm64 | Apple silicon |
 | `thrift-<version>-osx-x86_64.tar.gz` | macOS 11+ x86_64 | Intel |
-| `thrift-<version>-windows-x86_32.exe` | Windows | Upstream's official 32-bit exe, mirrored as-is, with upstream's `.asc` signature |
+| `thrift-<version>-windows-x86_32.exe` | Windows | Upstream's official 32-bit exe, mirrored as-is with upstream's `.asc` signature, for versions where upstream publishes one |
 | `checksums.txt` | | SHA-256 of every asset above |
 
 The platform part of each name is the classifier that [os-maven-plugin](https://github.com/trustin/os-maven-plugin) and [osdetector-gradle-plugin](https://github.com/google/osdetector-gradle-plugin) detect (`${os.detected.classifier}`), the same scheme protoc uses, so Maven and Gradle builds can pick the right asset without any mapping.

@@ -21,6 +21,12 @@ on:
 permissions:
   contents: read
 
+# An explicit "bash" adds -o pipefail; the implicit default is only "bash -e",
+# so a failing command piped into tee would not fail the step.
+defaults:
+  run:
+    shell: bash
+
 env:
   VERSION: ${{ inputs.version }}
   ALPINE_IMAGE: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
@@ -39,8 +45,13 @@ jobs:
         name: Fetch and verify upstream source
         run: |
           scripts/fetch-source.sh "$VERSION" source | tee fetch.log
+          signer=$(awk -v f="thrift-$VERSION.tar.gz:" '$1 == "verified" && $2 == f {print $3}' fetch.log)
+          if [ -z "$signer" ]; then
+            echo "::error::thrift-$VERSION.tar.gz was not verified"
+            exit 1
+          fi
           echo "sha256=$(sha256sum "source/thrift-$VERSION.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
-          echo "signer=$(awk -v f="thrift-$VERSION.tar.gz:" '$1 == "verified" && $2 == f {print $3}' fetch.log)" >> "$GITHUB_OUTPUT"
+          echo "signer=$signer" >> "$GITHUB_OUTPUT"
       - name: Stage Windows exe mirror
         run: |
           mkdir -p windows
