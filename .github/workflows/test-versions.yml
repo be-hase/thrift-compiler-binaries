@@ -4,7 +4,6 @@ name: Test versions
 # Run manually, e.g. before backfilling or rebuilding releases of older
 # versions, or after a change to the build that may affect old sources.
 on:
-  pull_request: # TEMPORARY: reverted before merging
   workflow_dispatch:
     inputs:
       versions:
