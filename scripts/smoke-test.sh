@@ -40,8 +40,13 @@ case "$platform" in
   macos-universal)
     archs=$(lipo -archs "$bin")
     lipo -info "$bin"
+    min_os=${MACOSX_DEPLOYMENT_TARGET:-11.0}
     for a in arm64 x86_64; do
       grep -qw "$a" <<<"$archs" || fail "universal binary lacks $a"
+      # A newer Xcode must not silently raise the minimum macOS version.
+      minos=$(otool -arch "$a" -l "$bin" | awk '$1 == "minos" {print $2; exit}')
+      echo "$a minos: $minos"
+      [ "$minos" = "$min_os" ] || fail "$a slice requires macOS $minos, expected $min_os"
     done
     # Only system libraries may be linked (no Homebrew paths).
     otool -L "$bin"
