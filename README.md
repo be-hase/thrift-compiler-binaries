@@ -84,6 +84,17 @@ gpg --verify thrift-0.25.0-windows-x86.exe.asc thrift-0.25.0-windows-x86.exe
 
 See [`.github/workflows/build.yml`](.github/workflows/build.yml) and [`.github/workflows/release.yml`](.github/workflows/release.yml).
 
+```mermaid
+flowchart LR
+    prepare["prepare<br/>resolve version and tag"] --> source["source<br/>download and verify .asc"]
+    source --> lx["linux-x86_64<br/>Alpine, -static"]
+    source --> la["linux-aarch64<br/>Alpine, -static"]
+    source --> mac["macos-universal<br/>arm64 + x86_64"]
+    source --> win["Windows exe<br/>mirrored as-is"]
+    lx & la & mac --> smoke["smoke test<br/>and package"]
+    smoke & win --> release["release<br/>SHA256SUMS, attestation,<br/>tag and GitHub release"]
+```
+
 1. Download `thrift-<version>.tar.gz` and its `.asc` from `downloads.apache.org`, falling back to `archive.apache.org` for older versions. Verify the signature against the upstream [KEYS](https://downloads.apache.org/thrift/KEYS) file. The build stops if verification fails.
 2. Build only the compiler (CMake target `thrift-compiler`, with `-DBUILD_LIBRARIES=OFF -DBUILD_TESTING=OFF`). The upstream source is not modified.
    - **Linux**: in an Alpine container, linked with `-static`. x86_64 builds on `ubuntu-24.04`, aarch64 on `ubuntu-24.04-arm`.
@@ -95,12 +106,35 @@ See [`.github/workflows/build.yml`](.github/workflows/build.yml) and [`.github/w
    - macOS: confirm with `lipo` that both slices are present and that only system libraries are linked, then run the x86_64 slice under Rosetta
 4. Package each binary with upstream's `LICENSE` and `NOTICE`, generate `SHA256SUMS`, attest build provenance, and publish the GitHub release.
 
-## Maintenance
+## Lifecycle
 
-- **New upstream releases**: [Renovate](https://docs.renovatebot.com/) watches `apache/thrift` releases and opens a PR that bumps [`THRIFT_VERSION`](THRIFT_VERSION). The PR's CI builds and tests the new version. Merging the PR builds it again and publishes the `v<version>` release.
-- **A specific version**: run the *Release* workflow manually with `version` (and `revision` when rebuilding an existing release). Tags are created by the workflow after a successful build; pushing a tag by hand does not trigger a release.
-- Releases of versions older than the newest one are not marked as "latest".
-- **Testing without releasing**: the *Test versions* workflow builds and smoke-tests a list of versions (by default, every upstream version from 0.9.2, the first with a CMake build for the compiler, up to `THRIFT_VERSION`, so it follows Renovate's bumps) and publishes nothing. It only runs manually; PRs build just `THRIFT_VERSION` via the *Release* workflow.
+```mermaid
+flowchart TD
+    subgraph renovate["Renovate (automatic)"]
+        upstream["New release on apache/thrift"] -->|"waits 3 days"| bump["PR: bump THRIFT_VERSION"]
+        deps["PR: bump actions,<br/>Alpine, runners"]
+    end
+    bump --> prci["PR CI<br/>builds THRIFT_VERSION<br/>publishes nothing"]
+    deps --> prci
+    prci -->|"merge into main"| changed{"THRIFT_VERSION<br/>changed?"}
+    changed -->|"no"| nothing["Publishes nothing"]
+    changed -->|"yes"| build["Release workflow<br/>verify, build, test"]
+
+    subgraph manual["Manual runs"]
+        dispatch["Release workflow<br/>version, revision"]
+        testversions["Test versions workflow"]
+    end
+    dispatch --> build
+    build --> publish["Tag and GitHub release<br/>e.g. v0.26.0<br/>or v0.25.0-1"]
+    testversions --> testonly["Builds 0.9.2 to<br/>THRIFT_VERSION<br/>publishes nothing"]
+```
+
+- **New upstream release**: [Renovate](https://docs.renovatebot.com/) watches `apache/thrift` releases. Three days after a new one appears, giving the tarball time to reach the mirrors, it opens a PR that bumps [`THRIFT_VERSION`](THRIFT_VERSION). The PR's CI builds and tests that version. Merging the PR builds it again and publishes `v<version>`.
+- **Dependency updates**: Renovate also bumps the pinned actions, the Alpine image digest and the runner labels. Their PRs build and test `THRIFT_VERSION`; merging them publishes nothing.
+- **Backfilling or rebuilding a version**: run the *Release* workflow manually with `version`. Add `revision` to rebuild an existing release (`revision: 1` → `v0.25.0-1`); the original release stays.
+- **Tags** are created by the workflow only after a successful build. Pushing a tag by hand does not trigger a release.
+- **"Latest"** goes to a release only if it is the newest version, so backfilled old versions never take it over.
+- **Testing without releasing**: the *Test versions* workflow builds and smoke-tests every upstream version from 0.9.2 (the first with a CMake build for the compiler) up to `THRIFT_VERSION`, or the versions you pass in. It only runs manually, e.g. before backfilling, or after changing the build in a way that may affect old sources.
 
 The build itself lives in the reusable [`.github/workflows/build.yml`](.github/workflows/build.yml), which both workflows call.
 
