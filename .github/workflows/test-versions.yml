@@ -1,15 +1,9 @@
 name: Test versions
 
 # Build and smoke-test several upstream versions without releasing anything.
-# Runs on PRs that touch the build itself, and on demand (e.g. before
-# backfilling releases of older versions).
+# Run manually, e.g. before backfilling or rebuilding releases of older
+# versions, or after a change to the build that may affect old sources.
 on:
-  pull_request:
-    paths:
-      - scripts/**
-      - test/**
-      - .github/workflows/build.yml
-      - .github/workflows/test-versions.yml
   workflow_dispatch:
     inputs:
       versions:

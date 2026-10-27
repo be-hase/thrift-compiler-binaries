@@ -100,7 +100,7 @@ See [`.github/workflows/build.yml`](.github/workflows/build.yml) and [`.github/w
 - **New upstream releases**: [Renovate](https://docs.renovatebot.com/) watches `apache/thrift` releases and opens a PR that bumps [`THRIFT_VERSION`](THRIFT_VERSION). The PR's CI builds and tests the new version. Merging the PR builds it again and publishes the `v<version>` release.
 - **A specific version**: run the *Release* workflow manually with `version` (and `revision` when rebuilding an existing release), or push a `v<version>` / `v<version>-<n>` tag.
 - Releases of versions older than the newest one are not marked as "latest".
-- **Testing without releasing**: the *Test versions* workflow builds and smoke-tests a list of versions (by default, every upstream version from 0.9.2, the first with a CMake build for the compiler, up to `THRIFT_VERSION`, so it follows Renovate's bumps) and publishes nothing. It runs on PRs that change the build, and can be run manually.
+- **Testing without releasing**: the *Test versions* workflow builds and smoke-tests a list of versions (by default, every upstream version from 0.9.2, the first with a CMake build for the compiler, up to `THRIFT_VERSION`, so it follows Renovate's bumps) and publishes nothing. It only runs manually; PRs build just `THRIFT_VERSION` via the *Release* workflow.
 
 The build itself lives in the reusable [`.github/workflows/build.yml`](.github/workflows/build.yml), which both workflows call.
 
