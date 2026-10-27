@@ -45,7 +45,8 @@ case "$platform" in
     done
     # Only system libraries may be linked (no Homebrew paths).
     otool -L "$bin"
-    if otool -L "$bin" | tail -n +2 | grep -vE '^[[:space:]]+(/usr/lib/|/System/)'; then
+    # Dependency lines are indented; the others are per-architecture headers.
+    if otool -L "$bin" | grep -E '^[[:space:]]' | grep -vE '^[[:space:]]+(/usr/lib/|/System/)'; then
       fail "links against non-system libraries"
     fi
     if arch -x86_64 /usr/bin/true 2>/dev/null; then

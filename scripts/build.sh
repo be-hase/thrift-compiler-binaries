@@ -15,8 +15,12 @@ work=$(mktemp -d)
 tar -xzf "$tarball" -C "$work"
 src=$(find "$work" -mindepth 1 -maxdepth 1 -type d -name 'thrift-*')
 cmake_src=$src
-# 0.9.2 only has a standalone CMake build for the compiler.
-[ -f "$src/CMakeLists.txt" ] || cmake_src=$src/compiler/cpp
+target=thrift-compiler
+# 0.9.2 only has a standalone CMake build for the compiler, whose target is "thrift".
+if [ ! -f "$src/CMakeLists.txt" ]; then
+  cmake_src=$src/compiler/cpp
+  target=thrift
+fi
 
 set -- \
   -DCMAKE_BUILD_TYPE=Release \
@@ -47,7 +51,7 @@ esac
 
 cmake -S "$cmake_src" -B "$work/build" "$@"
 # An explicit job count: a bare --parallel means unlimited `make -j`.
-cmake --build "$work/build" --target thrift-compiler --parallel "$(getconf _NPROCESSORS_ONLN)"
+cmake --build "$work/build" --target "$target" --parallel "$(getconf _NPROCESSORS_ONLN)"
 
 bin=$(find "$work/build" -type f -name thrift -perm -u+x | head -n 1)
 if [ -z "$bin" ]; then
