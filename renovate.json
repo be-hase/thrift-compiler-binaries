@@ -1,0 +1,41 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "helpers:pinGitHubActionDigests"],
+  "customManagers": [
+    {
+      "description": "Upstream Thrift version to build and release",
+      "customType": "regex",
+      "managerFilePatterns": ["/^THRIFT_VERSION$/"],
+      "matchStrings": ["^(?<currentValue>\\S+)\\s*$"],
+      "depNameTemplate": "apache/thrift",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "description": "Alpine image used for the static Linux builds",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": [
+        "ALPINE_IMAGE: (?<depName>alpine):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Runner labels in job matrices (the github-actions manager only reads literal runs-on values)",
+      "customType": "regex",
+      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
+      "matchStrings": ["runner: (?<depName>ubuntu|macos)-(?<currentValue>\\S+)"],
+      "datasourceTemplate": "github-runners",
+      "versioningTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Wait for the upstream tarball to reach the mirrors before proposing a new release",
+      "matchDepNames": ["apache/thrift"],
+      "minimumReleaseAge": "3 days",
+      "commitMessageTopic": "Thrift",
+      "labels": ["thrift-release"]
+    }
+  ]
+}

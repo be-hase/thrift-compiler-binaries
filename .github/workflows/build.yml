@@ -1,0 +1,124 @@
+name: Build
+
+# Reusable workflow: fetch + verify the upstream source of one version, build the
+# compiler for every platform, smoke-test and package it. Never publishes
+# anything; artifacts are named "dist-<version>-<platform>".
+on:
+  workflow_call:
+    inputs:
+      version:
+        description: Upstream Thrift version (e.g. 0.25.0)
+        required: true
+        type: string
+    outputs:
+      source-sha256:
+        description: SHA-256 of the verified upstream source tarball
+        value: ${{ jobs.source.outputs.sha256 }}
+      source-signer:
+        description: Fingerprint of the key that signed the upstream source tarball
+        value: ${{ jobs.source.outputs.signer }}
+
+permissions:
+  contents: read
+
+env:
+  VERSION: ${{ inputs.version }}
+  ALPINE_IMAGE: alpine:3.24@sha256:be2656061b536c1883c4034790e21d0a09c5aaaf51968b89368a3c0371ea2c9a
+
+jobs:
+  source:
+    runs-on: ubuntu-24.04
+    outputs:
+      sha256: ${{ steps.fetch.outputs.sha256 }}
+      signer: ${{ steps.fetch.outputs.signer }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: fetch
+        name: Fetch and verify upstream source
+        run: |
+          scripts/fetch-source.sh "$VERSION" source | tee fetch.log
+          echo "sha256=$(sha256sum "source/thrift-$VERSION.tar.gz" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "signer=$(awk -v f="thrift-$VERSION.tar.gz:" '$1 == "verified" && $2 == f {print $3}' fetch.log)" >> "$GITHUB_OUTPUT"
+      - name: Stage Windows exe mirror
+        run: |
+          mkdir -p windows
+          if [ -f "source/thrift-$VERSION.exe" ]; then
+            mv "source/thrift-$VERSION.exe" "windows/thrift-$VERSION-windows-x86_32.exe"
+            mv "source/thrift-$VERSION.exe.asc" "windows/thrift-$VERSION-windows-x86_32.exe.asc"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: source-${{ inputs.version }}
+          path: source/
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-${{ inputs.version }}-windows
+          path: windows/
+          if-no-files-found: ignore
+          retention-days: 7
+
+  build:
+    needs: source
+    strategy:
+      fail-fast: false
+      matrix:
+        # Platform names are os-maven-plugin's ${os.detected.classifier}, so
+        # Gradle/Maven builds can locate assets without any mapping.
+        include:
+          - platform: linux-x86_64
+            runner: ubuntu-24.04
+          - platform: linux-aarch_64
+            runner: ubuntu-24.04-arm
+          - platform: osx-aarch_64
+            runner: macos-26
+            macos-arch: arm64
+          # Cross-compiled on Apple silicon and tested under Rosetta.
+          - platform: osx-x86_64
+            runner: macos-26
+            macos-arch: x86_64
+    runs-on: ${{ matrix.runner }}
+    env:
+      PLATFORM: ${{ matrix.platform }}
+      # Used by build.sh and checked by smoke-test.sh (macOS only).
+      MACOSX_DEPLOYMENT_TARGET: "11.0"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: source-${{ inputs.version }}
+          path: source
+      - name: Build (Alpine, static)
+        if: runner.os == 'Linux'
+        # Run the container directly rather than via `container:` because
+        # JavaScript actions don't run in Alpine containers on arm64.
+        run: |
+          docker run --rm -v "$PWD:/repo" -w /repo -e VERSION "$ALPINE_IMAGE" sh -euxc '
+            apk add --no-cache build-base cmake flex bison
+            sh scripts/build.sh "source/thrift-$VERSION.tar.gz" out/thrift
+          '
+      - name: Build (macOS)
+        if: runner.os == 'macOS'
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+          MACOS_ARCH: ${{ matrix.macos-arch }}
+        run: |
+          brew install bison flex
+          sh scripts/build.sh "source/thrift-$VERSION.tar.gz" out/thrift
+      # Linux binaries are tested on the Ubuntu host (not in Alpine) to show
+      # they run on a glibc distribution.
+      - name: Smoke test
+        run: scripts/smoke-test.sh out/thrift "$VERSION" "$PLATFORM"
+      - name: Package
+        run: scripts/package.sh "$VERSION" "$PLATFORM" out dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-${{ inputs.version }}-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
