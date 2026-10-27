@@ -72,11 +72,11 @@ jobs:
           pattern: dist-${{ needs.prepare.outputs.version }}-*
           path: dist
           merge-multiple: true
-      - name: Generate SHA256SUMS
+      - name: Generate checksums.txt
         working-directory: dist
         run: |
-          sha256sum -- * > SHA256SUMS
-          cat SHA256SUMS
+          sha256sum -- * > checksums.txt
+          cat checksums.txt
       - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
         with:
           subject-path: dist/*.tar.gz
@@ -94,11 +94,11 @@ jobs:
             echo "| Asset | Platform |"
             echo "| --- | --- |"
             echo "| \`thrift-$VERSION-linux-x86_64.tar.gz\` | Linux x86_64 (static) |"
-            echo "| \`thrift-$VERSION-linux-aarch64.tar.gz\` | Linux aarch64 (static) |"
-            echo "| \`thrift-$VERSION-macos-arm64.tar.gz\` | macOS 11+ arm64 (Apple silicon) |"
-            echo "| \`thrift-$VERSION-macos-x86_64.tar.gz\` | macOS 11+ x86_64 (Intel) |"
-            if [ -f "dist/thrift-$VERSION-windows-x86.exe" ]; then
-              echo "| \`thrift-$VERSION-windows-x86.exe\` | Windows, upstream's official exe mirrored as-is (\`.asc\` is upstream's signature) |"
+            echo "| \`thrift-$VERSION-linux-aarch_64.tar.gz\` | Linux aarch64 (static) |"
+            echo "| \`thrift-$VERSION-osx-aarch_64.tar.gz\` | macOS 11+ arm64 (Apple silicon) |"
+            echo "| \`thrift-$VERSION-osx-x86_64.tar.gz\` | macOS 11+ x86_64 (Intel) |"
+            if [ -f "dist/thrift-$VERSION-windows-x86_32.exe" ]; then
+              echo "| \`thrift-$VERSION-windows-x86_32.exe\` | Windows, upstream's official 32-bit exe mirrored as-is (\`.asc\` is upstream's signature) |"
             fi
             echo
             echo "See the [README](https://github.com/$GITHUB_REPOSITORY#verifying-downloads) for how to verify downloads."

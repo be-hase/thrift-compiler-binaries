@@ -45,8 +45,8 @@ jobs:
         run: |
           mkdir -p windows
           if [ -f "source/thrift-$VERSION.exe" ]; then
-            mv "source/thrift-$VERSION.exe" "windows/thrift-$VERSION-windows-x86.exe"
-            mv "source/thrift-$VERSION.exe.asc" "windows/thrift-$VERSION-windows-x86.exe.asc"
+            mv "source/thrift-$VERSION.exe" "windows/thrift-$VERSION-windows-x86_32.exe"
+            mv "source/thrift-$VERSION.exe.asc" "windows/thrift-$VERSION-windows-x86_32.exe.asc"
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -66,16 +66,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Platform names are os-maven-plugin's ${os.detected.classifier}, so
+        # Gradle/Maven builds can locate assets without any mapping.
         include:
           - platform: linux-x86_64
             runner: ubuntu-24.04
-          - platform: linux-aarch64
+          - platform: linux-aarch_64
             runner: ubuntu-24.04-arm
-          - platform: macos-arm64
+          - platform: osx-aarch_64
             runner: macos-26
             macos-arch: arm64
           # Cross-compiled on Apple silicon and tested under Rosetta.
-          - platform: macos-x86_64
+          - platform: osx-x86_64
             runner: macos-26
             macos-arch: x86_64
     runs-on: ${{ matrix.runner }}

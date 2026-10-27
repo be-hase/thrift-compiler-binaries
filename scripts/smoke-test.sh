@@ -2,7 +2,7 @@
 # Smoke-test a built thrift compiler.
 #
 # Usage: scripts/smoke-test.sh <thrift-binary> <expected-version> <platform>
-#   platform: linux-x86_64 | linux-aarch64 | macos-arm64 | macos-x86_64
+#   platform: linux-x86_64 | linux-aarch_64 | osx-x86_64 | osx-aarch_64
 set -euo pipefail
 
 bin=${1:?usage: smoke-test.sh <thrift-binary> <expected-version> <platform>}
@@ -29,7 +29,7 @@ case "$platform" in
     grep -qE 'statically linked|static-pie linked' <<<"$info" || fail "not statically linked"
     case "$platform" in
       linux-x86_64) grep -q 'x86-64' <<<"$info" || fail "not an x86-64 binary" ;;
-      linux-aarch64) grep -q 'aarch64' <<<"$info" || fail "not an aarch64 binary" ;;
+      linux-aarch_64) grep -q 'aarch64' <<<"$info" || fail "not an aarch64 binary" ;;
     esac
     # glibc's ldd prints "not a dynamic executable" for static binaries and
     # "statically linked" for static-pie ones.
@@ -37,10 +37,13 @@ case "$platform" in
     echo "ldd: $ldd_out"
     grep -qE 'not a dynamic executable|statically linked' <<<"$ldd_out" || fail "ldd reports dynamic dependencies"
     ;;
-  macos-arm64 | macos-x86_64)
+  osx-aarch_64 | osx-x86_64)
     # On an Apple silicon runner, the x86_64 build runs under Rosetta for the
     # version check above and the code generation below.
-    want_arch=${platform#macos-}
+    case "$platform" in
+      osx-aarch_64) want_arch=arm64 ;;
+      osx-x86_64) want_arch=x86_64 ;;
+    esac
     archs=$(lipo -archs "$bin" | xargs)
     echo "architectures: $archs"
     [ "$archs" = "$want_arch" ] || fail "expected a $want_arch-only binary, got: $archs"

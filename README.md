@@ -15,15 +15,18 @@ The Thrift project publishes a source tarball and a Windows `.exe`, but no prebu
 | Asset | Platform | Notes |
 | --- | --- | --- |
 | `thrift-<version>-linux-x86_64.tar.gz` | Linux x86_64 | Fully static (musl), runs on any distribution |
-| `thrift-<version>-linux-aarch64.tar.gz` | Linux aarch64 | Fully static (musl), runs on any distribution |
-| `thrift-<version>-macos-arm64.tar.gz` | macOS 11+ arm64 | Apple silicon |
-| `thrift-<version>-macos-x86_64.tar.gz` | macOS 11+ x86_64 | Intel |
-| `thrift-<version>-windows-x86.exe` | Windows | Upstream's official exe, mirrored as-is, with upstream's `.asc` signature |
+| `thrift-<version>-linux-aarch_64.tar.gz` | Linux aarch64 | Fully static (musl), runs on any distribution |
+| `thrift-<version>-osx-aarch_64.tar.gz` | macOS 11+ arm64 | Apple silicon |
+| `thrift-<version>-osx-x86_64.tar.gz` | macOS 11+ x86_64 | Intel |
+| `thrift-<version>-windows-x86_32.exe` | Windows | Upstream's official 32-bit exe, mirrored as-is, with upstream's `.asc` signature |
+| `checksums.txt` | | SHA-256 of every asset above |
 
-Each tarball contains a single directory with the `thrift` binary and the upstream `LICENSE` and `NOTICE` files:
+The platform part of each name is the classifier that [os-maven-plugin](https://github.com/trustin/os-maven-plugin) and [osdetector-gradle-plugin](https://github.com/google/osdetector-gradle-plugin) detect (`${os.detected.classifier}`), the same scheme protoc uses, so Maven and Gradle builds can pick the right asset without any mapping.
+
+Each tarball holds the `thrift` binary and the upstream `LICENSE` and `NOTICE` files at its root:
 
 ```
-thrift-0.25.0-linux-x86_64/
+thrift-0.25.0-linux-x86_64.tar.gz
 ├── LICENSE
 ├── NOTICE
 └── thrift
@@ -35,15 +38,15 @@ Release tags match the upstream version (`v0.25.0`). If a version has to be rebu
 
 ```sh
 VERSION=0.25.0
-PLATFORM=linux-x86_64   # linux-x86_64 | linux-aarch64 | macos-arm64 | macos-x86_64
+PLATFORM=linux-x86_64   # linux-x86_64 | linux-aarch_64 | osx-x86_64 | osx-aarch_64
 BASE=https://github.com/be-hase/thrift-compiler-binaries/releases/download/v$VERSION
 
 curl -fsSLO "$BASE/thrift-$VERSION-$PLATFORM.tar.gz"
-curl -fsSLO "$BASE/SHA256SUMS"
-sha256sum --check --ignore-missing SHA256SUMS   # macOS: shasum -a 256 --check --ignore-missing SHA256SUMS
+curl -fsSLO "$BASE/checksums.txt"
+sha256sum --check --ignore-missing checksums.txt   # macOS: shasum -a 256 --check --ignore-missing checksums.txt
 
-tar -xzf "thrift-$VERSION-$PLATFORM.tar.gz"
-install -m 0755 "thrift-$VERSION-$PLATFORM/thrift" ~/.local/bin/thrift
+tar -xzf "thrift-$VERSION-$PLATFORM.tar.gz" thrift
+install -m 0755 thrift ~/.local/bin/thrift
 thrift --version
 ```
 
@@ -51,17 +54,17 @@ Or with the GitHub CLI:
 
 ```sh
 gh release download v0.25.0 --repo be-hase/thrift-compiler-binaries \
-  --pattern 'thrift-0.25.0-linux-x86_64.tar.gz' --pattern SHA256SUMS
+  --pattern 'thrift-0.25.0-linux-x86_64.tar.gz' --pattern checksums.txt
 ```
 
 ## Verifying downloads
 
 ### Checksums
 
-Every release has a `SHA256SUMS` file covering all of its assets:
+Every release has a `checksums.txt` file with the SHA-256 of all of its assets:
 
 ```sh
-sha256sum --check --ignore-missing SHA256SUMS
+sha256sum --check --ignore-missing checksums.txt
 ```
 
 ### Build provenance
@@ -78,7 +81,7 @@ The mirrored Windows exe was built by upstream, not here, so it has no attestati
 ```sh
 curl -fsSLO https://downloads.apache.org/thrift/KEYS
 gpg --import KEYS
-gpg --verify thrift-0.25.0-windows-x86.exe.asc thrift-0.25.0-windows-x86.exe
+gpg --verify thrift-0.25.0-windows-x86_32.exe.asc thrift-0.25.0-windows-x86_32.exe
 ```
 
 ## How the binaries are built
@@ -89,12 +92,12 @@ See [`.github/workflows/build.yml`](.github/workflows/build.yml) and [`.github/w
 flowchart LR
     prepare["prepare<br/>resolve version and tag"] --> source["source<br/>download and verify .asc"]
     source --> lx["linux-x86_64<br/>Alpine, -static"]
-    source --> la["linux-aarch64<br/>Alpine, -static"]
-    source --> ma["macos-arm64"]
-    source --> mx["macos-x86_64<br/>cross-compiled"]
+    source --> la["linux-aarch_64<br/>Alpine, -static"]
+    source --> ma["osx-aarch_64"]
+    source --> mx["osx-x86_64<br/>cross-compiled"]
     source --> win["Windows exe<br/>mirrored as-is"]
     lx & la & ma & mx --> smoke["smoke test<br/>and package"]
-    smoke & win --> release["release<br/>SHA256SUMS, attestation,<br/>tag and GitHub release"]
+    smoke & win --> release["release<br/>checksums.txt, attestation,<br/>tag and GitHub release"]
 ```
 
 1. Download `thrift-<version>.tar.gz` and its `.asc` from `downloads.apache.org`, falling back to `archive.apache.org` for older versions. Verify the signature against the upstream [KEYS](https://downloads.apache.org/thrift/KEYS) file. The build stops if verification fails.
@@ -106,7 +109,7 @@ flowchart LR
    - generate Java, Python, Go, C++ and JavaScript code from [`test/smoke.thrift`](test/smoke.thrift)
    - Linux: confirm with `file` and `ldd` that the binary is static, then run it on the Ubuntu host rather than in Alpine
    - macOS: confirm with `lipo` that the binary contains only the expected architecture, that it still targets macOS 11, and that it links only system libraries. The x86_64 binary is tested under Rosetta.
-4. Package each binary with upstream's `LICENSE` and `NOTICE`, generate `SHA256SUMS`, attest build provenance, and publish the GitHub release.
+4. Package each binary with upstream's `LICENSE` and `NOTICE`, generate `checksums.txt`, attest build provenance, and publish the GitHub release.
 
 ## Lifecycle
 
