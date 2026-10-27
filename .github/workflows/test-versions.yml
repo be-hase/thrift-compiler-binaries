@@ -26,7 +26,7 @@ concurrency:
 
 jobs:
   versions:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     outputs:
       json: ${{ steps.list.outputs.json }}
     steps:
