@@ -2,7 +2,8 @@
 # Build only the thrift compiler from a verified upstream source tarball.
 #
 #   Linux: run inside an Alpine container; produces a fully static (musl) binary.
-#   macOS: produces a universal (arm64 + x86_64) binary. Needs Homebrew bison/flex,
+#   macOS: produces a binary for $MACOS_ARCH (arm64 or x86_64); on an Apple
+#          silicon host, x86_64 is cross-compiled. Needs Homebrew bison/flex,
 #          because the bison shipped with macOS (2.3) is too old.
 #
 # Usage: scripts/build.sh <source-tarball> <out-binary>
@@ -35,10 +36,11 @@ case "$(uname -s)" in
     set -- "$@" -DCMAKE_EXE_LINKER_FLAGS=-static
     ;;
   Darwin)
+    macos_arch=${MACOS_ARCH:?set MACOS_ARCH to arm64 or x86_64}
     brew_bison=$(brew --prefix bison)
     brew_flex=$(brew --prefix flex)
     set -- "$@" \
-      -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+      -DCMAKE_OSX_ARCHITECTURES="$macos_arch" \
       -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOSX_DEPLOYMENT_TARGET:-11.0}" \
       -DBISON_EXECUTABLE="$brew_bison/bin/bison" \
       -DFLEX_EXECUTABLE="$brew_flex/bin/flex"

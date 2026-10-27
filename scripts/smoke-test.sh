@@ -2,7 +2,7 @@
 # Smoke-test a built thrift compiler.
 #
 # Usage: scripts/smoke-test.sh <thrift-binary> <expected-version> <platform>
-#   platform: linux-x86_64 | linux-aarch64 | macos-universal
+#   platform: linux-x86_64 | linux-aarch64 | macos-arm64 | macos-x86_64
 set -euo pipefail
 
 bin=${1:?usage: smoke-test.sh <thrift-binary> <expected-version> <platform>}
@@ -37,29 +37,23 @@ case "$platform" in
     echo "ldd: $ldd_out"
     grep -qE 'not a dynamic executable|statically linked' <<<"$ldd_out" || fail "ldd reports dynamic dependencies"
     ;;
-  macos-universal)
-    archs=$(lipo -archs "$bin")
-    lipo -info "$bin"
+  macos-arm64 | macos-x86_64)
+    # On an Apple silicon runner, the x86_64 build runs under Rosetta for the
+    # version check above and the code generation below.
+    want_arch=${platform#macos-}
+    archs=$(lipo -archs "$bin" | xargs)
+    echo "architectures: $archs"
+    [ "$archs" = "$want_arch" ] || fail "expected a $want_arch-only binary, got: $archs"
+    # A newer Xcode must not silently raise the minimum macOS version.
     min_os=${MACOSX_DEPLOYMENT_TARGET:-11.0}
-    for a in arm64 x86_64; do
-      grep -qw "$a" <<<"$archs" || fail "universal binary lacks $a"
-      # A newer Xcode must not silently raise the minimum macOS version.
-      minos=$(otool -arch "$a" -l "$bin" | awk '$1 == "minos" {print $2; exit}')
-      echo "$a minos: $minos"
-      [ "$minos" = "$min_os" ] || fail "$a slice requires macOS $minos, expected $min_os"
-    done
+    minos=$(otool -l "$bin" | awk '$1 == "minos" {print $2; exit}')
+    echo "minos: $minos"
+    [ "$minos" = "$min_os" ] || fail "requires macOS $minos, expected $min_os"
     # Only system libraries may be linked (no Homebrew paths).
     otool -L "$bin"
-    # Dependency lines are indented; the others are per-architecture headers.
+    # Dependency lines are indented; the first line is the binary's path.
     if otool -L "$bin" | grep -E '^[[:space:]]' | grep -vE '^[[:space:]]+(/usr/lib/|/System/)'; then
       fail "links against non-system libraries"
-    fi
-    if arch -x86_64 /usr/bin/true 2>/dev/null; then
-      actual_x86=$(arch -x86_64 "$bin" --version)
-      echo "x86_64 slice (Rosetta): $actual_x86"
-      [ "$actual_x86" = "Thrift version $version" ] || fail "x86_64 slice reports '$actual_x86'"
-    else
-      echo "::warning::Rosetta unavailable; x86_64 slice not executed"
     fi
     ;;
   *)

@@ -16,7 +16,8 @@ The Thrift project publishes a source tarball and a Windows `.exe`, but no prebu
 | --- | --- | --- |
 | `thrift-<version>-linux-x86_64.tar.gz` | Linux x86_64 | Fully static (musl), runs on any distribution |
 | `thrift-<version>-linux-aarch64.tar.gz` | Linux aarch64 | Fully static (musl), runs on any distribution |
-| `thrift-<version>-macos-universal.tar.gz` | macOS 11+ | Universal binary (arm64 + x86_64) |
+| `thrift-<version>-macos-arm64.tar.gz` | macOS 11+ arm64 | Apple silicon |
+| `thrift-<version>-macos-x86_64.tar.gz` | macOS 11+ x86_64 | Intel |
 | `thrift-<version>-windows-x86.exe` | Windows | Upstream's official exe, mirrored as-is, with upstream's `.asc` signature |
 
 Each tarball contains a single directory with the `thrift` binary and the upstream `LICENSE` and `NOTICE` files:
@@ -34,7 +35,7 @@ Release tags match the upstream version (`v0.25.0`). If a version has to be rebu
 
 ```sh
 VERSION=0.25.0
-PLATFORM=linux-x86_64   # linux-x86_64 | linux-aarch64 | macos-universal
+PLATFORM=linux-x86_64   # linux-x86_64 | linux-aarch64 | macos-arm64 | macos-x86_64
 BASE=https://github.com/be-hase/thrift-compiler-binaries/releases/download/v$VERSION
 
 curl -fsSLO "$BASE/thrift-$VERSION-$PLATFORM.tar.gz"
@@ -89,21 +90,22 @@ flowchart LR
     prepare["prepare<br/>resolve version and tag"] --> source["source<br/>download and verify .asc"]
     source --> lx["linux-x86_64<br/>Alpine, -static"]
     source --> la["linux-aarch64<br/>Alpine, -static"]
-    source --> mac["macos-universal<br/>arm64 + x86_64"]
+    source --> ma["macos-arm64"]
+    source --> mx["macos-x86_64<br/>cross-compiled"]
     source --> win["Windows exe<br/>mirrored as-is"]
-    lx & la & mac --> smoke["smoke test<br/>and package"]
+    lx & la & ma & mx --> smoke["smoke test<br/>and package"]
     smoke & win --> release["release<br/>SHA256SUMS, attestation,<br/>tag and GitHub release"]
 ```
 
 1. Download `thrift-<version>.tar.gz` and its `.asc` from `downloads.apache.org`, falling back to `archive.apache.org` for older versions. Verify the signature against the upstream [KEYS](https://downloads.apache.org/thrift/KEYS) file. The build stops if verification fails.
 2. Build only the compiler (CMake target `thrift-compiler`, with `-DBUILD_LIBRARIES=OFF -DBUILD_TESTING=OFF`). The upstream source is not modified.
    - **Linux**: in an Alpine container, linked with `-static`. x86_64 builds on `ubuntu-24.04`, aarch64 on `ubuntu-24.04-arm`.
-   - **macOS**: on an arm64 runner with `-DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"`, using Homebrew's bison and flex.
+   - **macOS**: on an Apple silicon runner, one build per architecture (`-DCMAKE_OSX_ARCHITECTURES=arm64` or `x86_64`; x86_64 is cross-compiled), targeting macOS 11 and using Homebrew's bison and flex.
 3. Smoke-test each binary:
    - check the `thrift --version` output
    - generate Java, Python, Go, C++ and JavaScript code from [`test/smoke.thrift`](test/smoke.thrift)
    - Linux: confirm with `file` and `ldd` that the binary is static, then run it on the Ubuntu host rather than in Alpine
-   - macOS: confirm with `lipo` that both slices are present and that only system libraries are linked, then run the x86_64 slice under Rosetta
+   - macOS: confirm with `lipo` that the binary contains only the expected architecture, that it still targets macOS 11, and that it links only system libraries. The x86_64 binary is tested under Rosetta.
 4. Package each binary with upstream's `LICENSE` and `NOTICE`, generate `SHA256SUMS`, attest build provenance, and publish the GitHub release.
 
 ## Lifecycle
