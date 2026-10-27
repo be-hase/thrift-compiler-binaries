@@ -4,14 +4,12 @@
 #
 # Inputs (environment):
 #   EVENT          github.event_name
-#   REF_NAME       github.ref_name
 #   INPUT_VERSION  workflow_dispatch input (version)
 #   INPUT_REVISION workflow_dispatch input (rebuild number, optional)
 #   GH_TOKEN, GITHUB_REPOSITORY  for querying existing releases
 set -euo pipefail
 
 version_re='^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$'
-tag_re='^v([0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?)(-[0-9]+)?$'
 
 fail() { echo "::error::$*" >&2; exit 1; }
 release_exists() { gh release view "$1" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; }
@@ -19,19 +17,12 @@ release_exists() { gh release view "$1" --repo "$GITHUB_REPOSITORY" >/dev/null 2
 release=true
 case "$EVENT" in
   push)
-    if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-      [[ "$REF_NAME" =~ $tag_re ]] || fail "tag '$REF_NAME' must look like v0.25.0 or v0.25.0-1"
-      version=${BASH_REMATCH[1]}
-      tag=$REF_NAME
-      ! release_exists "$tag" || fail "release $tag already exists"
-    else
-      # THRIFT_VERSION changed on main (e.g. a merged Renovate PR).
-      version=$(tr -d '[:space:]' < THRIFT_VERSION)
-      tag=v$version
-      if release_exists "$tag"; then
-        echo "::notice::release $tag already exists; building without releasing"
-        release=false
-      fi
+    # THRIFT_VERSION changed on main (e.g. a merged Renovate PR).
+    version=$(tr -d '[:space:]' < THRIFT_VERSION)
+    tag=v$version
+    if release_exists "$tag"; then
+      echo "::notice::release $tag already exists; building without releasing"
+      release=false
     fi
     ;;
   workflow_dispatch)
